@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Board - AI Assistant</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- SortableJS for drag-and-drop -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    
+    <!-- Canvas-confetti for celebration -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <!-- Chart.js for analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Tone.js for sound effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        /* Custom styles for a polished 3D UI */
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent scrollbars during 3D rotation */
+        }
+
+        /* Animated Gradient Background */
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .animated-bg {
+            background: linear-gradient(-45deg, #2dd4bf, #34d399, #a78bfa, #f472b6);
+            background-size: 400% 400%;
+            animation: gradient 20s ease infinite;
+        }
+        .dark .animated-bg {
+            background: linear-gradient(-45deg, #0f172a, #1e293b, #4a044e, #701a75);
+            background-size: 400% 400%;
+            animation: gradient 25s ease infinite;
+        }
+
+        /* Dark mode transitions */
+        .dark-mode-transition {
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        /* 3D Title */
+        .title-3d {
+            text-shadow: 0px 1px 0px #c9c9c9, 0px 2px 0px #b9b9b9, 0px 3px 0px #a9a9a9, 0px 4px 0px #999999, 0px 5px 10px rgba(0, 0, 0, 0.6);
+        }
+        .dark .title-3d {
+             text-shadow: 0px 1px 0px #333, 0px 2px 0px #222, 0px 3px 0px #111, 0px 4px 0px #000, 0px 5px 10px rgba(0, 0, 0, 0.9);
+        }
+
+        /* 3D Scene and Carousel */
+        #scene {
+            perspective: 2500px;
+            width: 100%;
+            height: 70vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #carousel {
+            width: 30%; /* Adjust width of the carousel faces */
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 1s cubic-bezier(0.77, 0, 0.175, 1);
+        }
+
+        .kanban-column-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden; /* Hide the back of the panels */
+        }
+        
+        .task-card {
+            cursor: grab;
+            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            border-left-width: 4px;
+        }
+        .task-card:hover {
+            transform: translateY(-5px) scale(1.08);
+            box-shadow: 0 25px 30px -10px rgb(0 0 0 / 0.2), 0 10px 15px -8px rgb(0 0 0 / 0.2);
+        }
+        .task-card.fly-away {
+            transform: translateX(100px) scale(0.5);
+            opacity: 0;
+        }
+        
+        /* Glassmorphism Modal styles */
+        .modal-content {
+            transition: all 0.3s ease;
+            transform: translateY(-50px) scale(0.95);
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(15px) saturate(180%);
+            -webkit-backdrop-filter: blur(15px) saturate(180%);
+            border: 1px solid rgba(209, 213, 219, 0.3);
+        }
+        .dark .modal-content {
+            background: rgba(31, 41, 55, 0.6);
+            border: 1px solid rgba(75, 85, 99, 0.3);
+        }
+        .modal-backdrop:not(.hidden) .modal-content {
+            transform: translateY(0) scale(1);
+        }
+
+        /* Navigation Buttons */
+        .nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+            transform: translateY(-50%) scale(1.1);
+        }
+        #prevBtn { left: 15%; }
+        #nextBtn { right: 15%; }
+
+        /* AI Spinner */
+        .loader {
+            width: 18px;
+            height: 18px;
+            border: 2px solid #FFF;
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+</head>
+<body class="animated-bg dark-mode-transition h-screen flex flex-col">
+
+    <!-- App Header -->
+    <header class="bg-white/30 dark:bg-gray-800/30 backdrop-blur-lg shadow-lg sticky top-0 z-20 dark-mode-transition">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center mb-4">
+                <h1 class="text-4xl font-black text-gray-800 dark:text-white title-3d">Kanban Board</h1>
+                <div class="flex items-center space-x-4">
+                    <button id="analyticsBtn" class="bg-white/50 dark:bg-gray-700/50 hover:bg-white/80 dark:hover:bg-gray-600/50 text-gray-800 dark:text-gray-200 font-bold py-2 px-4 rounded-lg shadow-sm transition-transform transform hover:scale-105">Analytics</button>
+                    <button id="addTaskBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow transition-transform transform hover:scale-105">+ Add Task</button>
+                    <!-- Dark Mode Toggle -->
+                    <div class="flex items-center">
+                        <span class="text-sm text-gray-700 dark:text-gray-300 mr-2">☀️</span>
+                        <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" name="toggle" id="dark-mode-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                            <label for="dark-mode-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                        </div>
+                        <span class="text-sm text-gray-700 dark:text-gray-300">🌙</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Search and Filter Bar -->
+            <div class="flex items-center space-x-4">
+                <input type="text" id="searchInput" class="w-full md:w-1/3 border-2 border-gray-300/50 dark:border-gray-600/50 bg-white/50 dark:bg-gray-700/50 text-gray-900 dark:text-white rounded-lg p-2 focus:outline-none focus:border-indigo-500" placeholder="Search tasks...">
+                <div id="filter-container" class="flex items-center space-x-2">
+                    <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Filter by:</span>
+                    <button data-priority="all" class="filter-btn filter-btn-active px-3 py-1 rounded-md text-sm font-medium bg-white/50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-gray-600/50">All</button>
+                    <button data-priority="high" class="filter-btn px-3 py-1 rounded-md text-sm font-medium bg-white/50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-gray-600/50">High</button>
+                    <button data-priority="medium" class="filter-btn px-3 py-1 rounded-md text-sm font-medium bg-white/50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-gray-600/50">Medium</button>
+                    <button data-priority="low" class="filter-btn px-3 py-1 rounded-md text-sm font-medium bg-white/50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-200 hover:bg-white/80 dark:hover:bg-gray-600/50">Low</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Board -->
+    <main class="flex-grow flex items-center justify-center relative">
+        <button id="prevBtn" class="nav-btn">
+            <svg class="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+        </button>
+        <div id="scene">
+            <div id="carousel">
+                <!-- Columns will be populated by JS -->
+                <div id="face-todo" class="kanban-column-face">
+                    <div class="bg-white/30 dark:bg-gray-800/30 backdrop-blur-sm rounded-lg shadow-2xl p-4 dark-mode-transition h-full flex flex-col">
+                        <h2 class="text-xl font-semibold mb-4 border-b-2 border-red-500 pb-2 text-gray-800 dark:text-gray-200">To Do</h2>
+                        <div id="todo-column" class="kanban-column space-y-4 flex-grow overflow-y-auto"></div>
+                    </div>
+                </div>
+                <div id="face-inprogress" class="kanban-column-face">
+                    <div class="bg-white/30 dark:bg-gray-800/30 backdrop-blur-sm rounded-lg shadow-2xl p-4 dark-mode-transition h-full flex flex-col">
+                        <h2 class="text-xl font-semibold mb-4 border-b-2 border-yellow-500 pb-2 text-gray-800 dark:text-gray-200">In Progress</h2>
+                        <div id="inprogress-column" class="kanban-column space-y-4 flex-grow overflow-y-auto"></div>
+                    </div>
+                </div>
+                <div id="face-done" class="kanban-column-face">
+                    <div class="bg-white/30 dark:bg-gray-800/30 backdrop-blur-sm rounded-lg shadow-2xl p-4 dark-mode-transition h-full flex flex-col">
+                        <div class="flex justify-between items-center mb-4 border-b-2 border-green-500 pb-2">
+                            <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-200">Done</h2>
+                            <button id="clearCompletedBtn" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Clear All</button>
+                        </div>
+                        <div id="done-column" class="kanban-column space-y-4 flex-grow overflow-y-auto"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <button id="nextBtn" class="nav-btn">
+             <svg class="w-8 h-8 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+        </button>
+    </main>
+
+    <!-- Modals -->
+    <div id="taskModal" class="fixed inset-0 bg-black/50 modal-backdrop flex items-center justify-center hidden opacity-0 z-30">
+        <div class="modal-content rounded-xl shadow-2xl p-6 w-full max-w-md dark-mode-transition">
+            <h3 id="modalTitle" class="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Add a New Task</h3>
+            <div class="space-y-4">
+                <div class="relative">
+                    <input type="text" id="taskInput" class="w-full border-2 border-gray-300/50 dark:border-gray-600/50 bg-white/50 dark:bg-gray-700/50 text-gray-900 dark:text-white rounded-lg p-3 pr-10 focus:outline-none focus:border-indigo-500" placeholder="Enter task description...">
+                    <button id="aiBtn" class="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-indigo-500">
+                        <span id="aiBtn-icon">✨</span>
+                        <div id="aiBtn-loader" class="loader hidden"></div>
+                    </button>
+                </div>
+                <div id="subtasks-container" class="hidden space-y-2 pl-2 border-l-2 border-gray-200 dark:border-gray-600">
+                    <!-- AI-generated subtasks will appear here -->
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="taskPriority" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+                        <select id="taskPriority" class="w-full border-2 border-gray-300/50 dark:border-gray-600/50 bg-white/50 dark:bg-gray-700/50 text-gray-900 dark:text-white rounded-lg p-3 focus:outline-none focus:border-indigo-500">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="taskDueDate" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+                        <input type="date" id="taskDueDate" class="w-full border-2 border-gray-300/50 dark:border-gray-600/50 bg-white/50 dark:bg-gray-700/50 text-gray-900 dark:text-white rounded-lg p-3 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-3 mt-6">
+                <button id="cancelTaskBtn" class="bg-gray-300/70 hover:bg-gray-400/70 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancel</button>
+                <button id="saveTaskBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">Save Task</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="deleteModal" class="fixed inset-0 bg-black/50 modal-backdrop flex items-center justify-center hidden opacity-0 z-40">
+        <div class="modal-content rounded-xl shadow-2xl p-6 w-full max-w-sm dark-mode-transition">
+            <h3 class="text-xl font-bold mb-4 text-gray-900 dark:text-white">Confirm Deletion</h3>
+            <p class="text-gray-600 dark:text-gray-300 mb-6">Are you sure you want to delete this task?</p>
+            <div class="flex justify-end space-x-3">
+                <button id="cancelDeleteBtn" class="bg-gray-300/70 hover:bg-gray-400/70 text-gray-800 font-bold py-2 px-4 rounded-lg">Cancel</button>
+                <button id="confirmDeleteBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Delete</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="analyticsModal" class="fixed inset-0 bg-black/50 modal-backdrop flex items-center justify-center hidden opacity-0 z-30">
+        <div class="modal-content rounded-xl shadow-2xl p-6 w-full max-w-3xl dark-mode-transition">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-bold text-gray-900 dark:text-white">Task Analytics</h3>
+                <button id="closeAnalyticsBtn" class="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white text-3xl">&times;</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h4 class="text-lg font-semibold text-center text-gray-700 dark:text-gray-300 mb-2">Task Status Breakdown</h4>
+                    <canvas id="statusPieChart"></canvas>
+                </div>
+                <div>
+                    <h4 class="text-lg font-semibold text-center text-gray-700 dark:text-gray-300 mb-2">Weekly Completions</h4>
+                    <canvas id="completionBarChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- IMPORTANT: ADD YOUR GEMINI API KEY HERE ---
+            const GEMINI_API_KEY = "AIzaSyCbRHlzAVjLoPJGjIEwMBDEbRJyALaqlxQ"; // <--- PASTE YOUR KEY HERE
+
+            // --- DOM Elements ---
+            const columns = {
+                todo: document.getElementById('todo-column'),
+                inprogress: document.getElementById('inprogress-column'),
+                done: document.getElementById('done-column')
+            };
+            const carousel = document.getElementById('carousel');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const faces = document.querySelectorAll('.kanban-column-face');
+
+            // --- App State ---
+            let tasks = JSON.parse(localStorage.getItem('kanbanTasks_v10')) || [];
+            let rotationY = 0;
+            const columnOrder = ['todo', 'inprogress', 'done'];
+            
+            // --- 3D Carousel Logic ---
+            const setupCarousel = () => {
+                const faceCount = faces.length;
+                const theta = 360 / faceCount;
+                const carouselWidth = carousel.offsetWidth;
+                const radius = Math.round((carouselWidth / 2) / Math.tan(Math.PI / faceCount));
+
+                faces.forEach((face, i) => {
+                    face.style.transform = `rotateY(${i * theta}deg) translateZ(${radius}px)`;
+                });
+            };
+
+            const rotateCarousel = () => {
+                carousel.style.transform = `rotateY(${rotationY}deg)`;
+            };
+
+            nextBtn.addEventListener('click', () => { rotationY -= 120; rotateCarousel(); });
+            prevBtn.addEventListener('click', () => { rotationY += 120; rotateCarousel(); });
+            
+            nextBtn.addEventListener('mouseenter', () => carousel.style.transform = `rotateY(${rotationY - 5}deg)`);
+            nextBtn.addEventListener('mouseleave', rotateCarousel);
+            prevBtn.addEventListener('mouseenter', () => carousel.style.transform = `rotateY(${rotationY + 5}deg)`);
+            prevBtn.addEventListener('mouseleave', rotateCarousel);
+
+            window.addEventListener('keydown', (e) => {
+                if (document.activeElement.tagName === 'INPUT') return;
+                if (e.key === 'ArrowRight') nextBtn.click();
+                if (e.key === 'ArrowLeft') prevBtn.click();
+            });
+
+            // --- The rest of the app logic ---
+            const addTaskBtn = document.getElementById('addTaskBtn');
+            const taskModal = document.getElementById('taskModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const taskInput = document.getElementById('taskInput');
+            const taskPriority = document.getElementById('taskPriority');
+            const taskDueDate = document.getElementById('taskDueDate');
+            const saveTaskBtn = document.getElementById('saveTaskBtn');
+            const cancelTaskBtn = document.getElementById('cancelTaskBtn');
+            const aiBtn = document.getElementById('aiBtn');
+            const aiBtnIcon = document.getElementById('aiBtn-icon');
+            const aiBtnLoader = document.getElementById('aiBtn-loader');
+            const subtasksContainer = document.getElementById('subtasks-container');
+            
+            const deleteModal = document.getElementById('deleteModal');
+            const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+            const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+
+            const analyticsBtn = document.getElementById('analyticsBtn');
+            const analyticsModal = document.getElementById('analyticsModal');
+            const closeAnalyticsBtn = document.getElementById('closeAnalyticsBtn');
+
+            const darkModeToggle = document.getElementById('dark-mode-toggle');
+            const searchInput = document.getElementById('searchInput');
+            const filterContainer = document.getElementById('filter-container');
+            const clearCompletedBtn = document.getElementById('clearCompletedBtn');
+
+            let taskToDeleteId = null;
+            let editingTaskId = null;
+            let currentSearchTerm = '';
+            let currentPriorityFilter = 'all';
+            let statusPieChart = null;
+            let completionBarChart = null;
+
+            const synth = new Tone.Synth().toDestination();
+            const pluckSynth = new Tone.PluckSynth().toDestination();
+
+            const playSound = async (action) => {
+                await Tone.start();
+                if (action === 'add') synth.triggerAttackRelease("C5", "8n");
+                if (action === 'complete') pluckSynth.triggerAttackRelease("G5", "8n", Tone.now());
+                if (action === 'delete') synth.triggerAttackRelease("C4", "8n");
+                if (action === 'move') new Tone.MembraneSynth().toDestination().triggerAttackRelease("C2", "8n");
+                if (action === 'ai') new Tone.AMSynth().toDestination().triggerAttackRelease("C4", "8n");
+            };
+
+            const renderTasks = () => {
+                Object.values(columns).forEach(column => column.innerHTML = '');
+                const filteredTasks = tasks.filter(task => {
+                    const matchesSearch = task.text.toLowerCase().includes(currentSearchTerm.toLowerCase());
+                    const matchesFilter = currentPriorityFilter === 'all' || task.priority === currentPriorityFilter;
+                    return matchesSearch && matchesFilter;
+                });
+                filteredTasks.forEach(task => {
+                    const taskElement = createTaskElement(task);
+                    if (columns[task.status]) columns[task.status].appendChild(taskElement);
+                });
+            };
+            
+            const moveTaskToNextStage = (taskId) => {
+                const task = tasks.find(t => t.id === taskId);
+                if (!task || task.status === 'done') return;
+                const cardElement = document.querySelector(`[data-id="${taskId}"]`);
+                if (cardElement) cardElement.classList.add('fly-away');
+                playSound('move');
+                setTimeout(() => {
+                    const currentIndex = columnOrder.indexOf(task.status);
+                    task.status = columnOrder[currentIndex + 1];
+                    if (task.status === 'done') {
+                        task.completionDate = new Date().toISOString();
+                        launchConfetti();
+                        playSound('complete');
+                    }
+                    saveTasks();
+                    renderTasks();
+                    nextBtn.click();
+                }, 300);
+            };
+
+            const createTaskElement = (task) => {
+                const div = document.createElement('div');
+                div.className = `task-card bg-white/80 dark:bg-gray-700/80 p-3 rounded-lg shadow-md flex justify-between items-start dark-mode-transition priority-${task.priority}`;
+                div.dataset.id = task.id;
+
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'flex-grow';
+                const textSpan = document.createElement('span');
+                textSpan.className = 'text-gray-800 dark:text-gray-200 font-semibold';
+                textSpan.textContent = task.text;
+                contentDiv.appendChild(textSpan);
+                
+                if (task.subtasks && task.subtasks.length > 0) {
+                    const subtaskWrapper = document.createElement('div');
+                    subtaskWrapper.className = 'mt-2 space-y-1 pl-2 border-l-2 border-gray-300 dark:border-gray-500';
+                    task.subtasks.forEach((subtask, index) => {
+                        const subtaskDiv = document.createElement('div');
+                        subtaskDiv.className = 'flex items-center text-sm';
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.checked = subtask.completed;
+                        checkbox.className = 'mr-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500';
+                        checkbox.onchange = () => {
+                            task.subtasks[index].completed = checkbox.checked;
+                            saveTasks();
+                            renderTasks(); // Re-render to update the visual state
+                        };
+                        const label = document.createElement('label');
+                        label.textContent = subtask.text;
+                        label.className = `dark:text-gray-300 ${subtask.completed ? 'line-through text-gray-400' : ''}`;
+                        subtaskDiv.appendChild(checkbox);
+                        subtaskDiv.appendChild(label);
+                        subtaskWrapper.appendChild(subtaskDiv);
+                    });
+                    contentDiv.appendChild(subtaskWrapper);
+                }
+
+                if (task.dueDate) {
+                    const dueDateSpan = document.createElement('div');
+                    const today = new Date().setHours(0,0,0,0);
+                    const dueDate = new Date(task.dueDate).setHours(0,0,0,0);
+                    const isOverdue = dueDate < today;
+                    dueDateSpan.className = `text-xs mt-2 ${isOverdue ? 'text-red-500 font-semibold' : 'text-gray-500 dark:text-gray-400'}`;
+                    dueDateSpan.textContent = `Due: ${new Date(task.dueDate).toLocaleDateString()}`;
+                    contentDiv.appendChild(dueDateSpan);
+                }
+                div.appendChild(contentDiv);
+
+                const buttonsDiv = document.createElement('div');
+                buttonsDiv.className = 'flex flex-col items-center space-y-2 flex-shrink-0 ml-2';
+                if (task.status !== 'done') {
+                    const moveBtn = document.createElement('button');
+                    moveBtn.className = 'action-btn text-gray-400 hover:text-green-500';
+                    moveBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 1.414L10.586 9H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z" clip-rule="evenodd" /></svg>`;
+                    moveBtn.onclick = (e) => { e.stopPropagation(); moveTaskToNextStage(task.id); };
+                    buttonsDiv.appendChild(moveBtn);
+                }
+                const editBtn = document.createElement('button');
+                editBtn.className = 'action-btn text-gray-400 hover:text-indigo-500';
+                editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>`;
+                editBtn.onclick = (e) => { e.stopPropagation(); openEditModal(task.id); };
+                buttonsDiv.appendChild(editBtn);
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'action-btn text-gray-400 hover:text-red-500';
+                deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>`;
+                deleteBtn.onclick = (e) => { e.stopPropagation(); taskToDeleteId = task.id; toggleModal(deleteModal, true); };
+                buttonsDiv.appendChild(deleteBtn);
+                div.appendChild(buttonsDiv);
+                return div;
+            };
+
+            const saveTasks = () => localStorage.setItem('kanbanTasks_v10', JSON.stringify(tasks));
+            const launchConfetti = () => confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
+
+            const toggleModal = (modal, show) => {
+                const modalContent = modal.querySelector('.modal-content');
+                if (show) {
+                    modal.classList.remove('hidden');
+                    setTimeout(() => {
+                        modal.classList.remove('opacity-0');
+                        modalContent.style.transform = 'translateY(0) scale(1)';
+                    }, 10);
+                } else {
+                    modal.classList.add('opacity-0');
+                    modalContent.style.transform = 'translateY(-50px) scale(0.95)';
+                    setTimeout(() => modal.classList.add('hidden'), 300);
+                }
+            };
+            
+            const openEditModal = (taskId) => {
+                editingTaskId = taskId;
+                const task = tasks.find(t => t.id === taskId);
+                if (!task) return;
+                modalTitle.textContent = 'Edit Task';
+                saveTaskBtn.textContent = 'Save Changes';
+                taskInput.value = task.text;
+                taskPriority.value = task.priority;
+                taskDueDate.value = task.dueDate;
+                renderSubtasksInModal(task.subtasks || []);
+                toggleModal(taskModal, true);
+            };
+
+            const applyDarkMode = (isDark) => {
+                document.documentElement.classList.toggle('dark', isDark);
+                darkModeToggle.checked = isDark;
+            };
+
+            const updateAnalyticsCharts = () => {
+                const isDark = document.documentElement.classList.contains('dark');
+                const textColor = isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+                const statusCounts = tasks.reduce((acc, task) => {
+                    acc[task.status] = (acc[task.status] || 0) + 1;
+                    return acc;
+                }, { todo: 0, inprogress: 0, done: 0 });
+                const pieChartCtx = document.getElementById('statusPieChart').getContext('2d');
+                if(statusPieChart) statusPieChart.destroy();
+                statusPieChart = new Chart(pieChartCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: ['To Do', 'In Progress', 'Done'],
+                        datasets: [{ data: [statusCounts.todo, statusCounts.inprogress, statusCounts.done], backgroundColor: ['#ef4444', '#f97316', '#22c55e'], borderColor: isDark ? '#1f2937' : '#ffffff', borderWidth: 4 }]
+                    },
+                    options: { responsive: true, plugins: { legend: { labels: { color: textColor } } } }
+                });
+                const completedTasks = tasks.filter(t => t.status === 'done' && t.completionDate);
+                const weeklyCompletions = completedTasks.reduce((acc, task) => {
+                    const date = new Date(task.completionDate);
+                    const year = date.getFullYear();
+                    const week = Math.ceil((((date - new Date(year, 0, 1)) / 86400000) + new Date(year, 0, 1).getDay() + 1) / 7);
+                    const weekLabel = `W${week}, ${year}`;
+                    acc[weekLabel] = (acc[weekLabel] || 0) + 1;
+                    return acc;
+                }, {});
+                const barChartCtx = document.getElementById('completionBarChart').getContext('2d');
+                if(completionBarChart) completionBarChart.destroy();
+                completionBarChart = new Chart(barChartCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(weeklyCompletions),
+                        datasets: [{ label: 'Tasks Completed', data: Object.values(weeklyCompletions), backgroundColor: '#4f46e5' }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { color: textColor, stepSize: 1 } },
+                            x: { ticks: { color: textColor } }
+                        }
+                    }
+                });
+            };
+
+            const renderSubtasksInModal = (subtasks) => {
+                subtasksContainer.innerHTML = '';
+                if (subtasks.length > 0) {
+                    subtasksContainer.classList.remove('hidden');
+                    subtasks.forEach(subtaskText => {
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center';
+                        div.innerHTML = `<input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 mr-2" data-text="${subtaskText}"><span class="dark:text-gray-300">${subtaskText}</span>`;
+                        subtasksContainer.appendChild(div);
+                    });
+                } else {
+                    subtasksContainer.classList.add('hidden');
+                }
+            };
+
+            const getAiSuggestions = async () => {
+                const taskText = taskInput.value.trim();
+                if (!taskText) {
+                    alert("Please enter a task description first.");
+                    return;
+                }
+                if (!GEMINI_API_KEY) {
+                    alert("Please add your Gemini API key to the script.");
+                    return;
+                }
+
+                aiBtnIcon.classList.add('hidden');
+                aiBtnLoader.classList.remove('hidden');
+                playSound('ai');
+
+                const prompt = `You are a helpful project manager. Break down the following task into a simple checklist of 3 to 5 short, actionable sub-tasks. Task: "${taskText}"`;
+                
+                try {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            generationConfig: {
+                                responseMimeType: "application/json",
+                                responseSchema: {
+                                    type: "OBJECT",
+                                    properties: { "subtasks": { type: "ARRAY", items: { type: "STRING" } } }
+                                }
+                            }
+                        })
+                    });
+
+                    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+                    
+                    const result = await response.json();
+                    const suggestions = JSON.parse(result.candidates[0].content.parts[0].text).subtasks;
+                    renderSubtasksInModal(suggestions);
+
+                } catch (error) {
+                    console.error("AI Assistant Error:", error);
+                    alert("Could not get AI suggestions. Please check your API key and network connection.");
+                } finally {
+                    aiBtnIcon.classList.remove('hidden');
+                    aiBtnLoader.classList.add('hidden');
+                }
+            };
+            
+            // Event Listeners
+            aiBtn.addEventListener('click', getAiSuggestions);
+
+            addTaskBtn.addEventListener('click', () => {
+                editingTaskId = null;
+                modalTitle.textContent = 'Add a New Task';
+                saveTaskBtn.textContent = 'Save Task';
+                taskInput.value = '';
+                taskPriority.value = 'medium';
+                taskDueDate.value = '';
+                subtasksContainer.innerHTML = '';
+                subtasksContainer.classList.add('hidden');
+                toggleModal(taskModal, true);
+            });
+            cancelTaskBtn.addEventListener('click', () => toggleModal(taskModal, false));
+            saveTaskBtn.addEventListener('click', () => {
+                const taskText = taskInput.value.trim();
+                if (!taskText) return;
+
+                const subtasks = Array.from(subtasksContainer.querySelectorAll('div')).map(div => ({
+                    text: div.querySelector('span').textContent,
+                    completed: div.querySelector('input').checked
+                }));
+
+                if (editingTaskId) {
+                    const task = tasks.find(t => t.id === editingTaskId);
+                    if (task) {
+                        task.text = taskText;
+                        task.priority = taskPriority.value;
+                        task.dueDate = taskDueDate.value || null;
+                        task.subtasks = subtasks;
+                    }
+                } else {
+                    const newTask = { id: `task-${Date.now()}`, text: taskText, status: 'todo', priority: taskPriority.value, dueDate: taskDueDate.value || null, completionDate: null, subtasks: subtasks };
+                    tasks.push(newTask);
+                    playSound('add');
+                }
+                editingTaskId = null;
+                saveTasks();
+                renderTasks();
+                toggleModal(taskModal, false);
+            });
+            cancelDeleteBtn.addEventListener('click', () => toggleModal(deleteModal, false));
+            confirmDeleteBtn.addEventListener('click', () => {
+                tasks = tasks.filter(task => task.id !== taskToDeleteId);
+                saveTasks();
+                renderTasks();
+                toggleModal(deleteModal, false);
+                taskToDeleteId = null;
+                playSound('delete');
+            });
+            analyticsBtn.addEventListener('click', () => { updateAnalyticsCharts(); toggleModal(analyticsModal, true); });
+            closeAnalyticsBtn.addEventListener('click', () => toggleModal(analyticsModal, false));
+            darkModeToggle.addEventListener('change', () => {
+                const isDark = darkModeToggle.checked;
+                localStorage.setItem('darkMode', isDark);
+                applyDarkMode(isDark);
+                if (!analyticsModal.classList.contains('hidden')) updateAnalyticsCharts();
+            });
+            searchInput.addEventListener('input', (e) => { currentSearchTerm = e.target.value; renderTasks(); });
+            filterContainer.addEventListener('click', (e) => {
+                if (e.target.classList.contains('filter-btn')) {
+                    currentPriorityFilter = e.target.dataset.priority;
+                    document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('filter-btn-active'));
+                    e.target.classList.add('filter-btn-active');
+                    renderTasks();
+                }
+            });
+            clearCompletedBtn.addEventListener('click', () => {
+                tasks = tasks.filter(task => task.status !== 'done');
+                saveTasks();
+                renderTasks();
+            });
+
+            Object.keys(columns).forEach(status => {
+                new Sortable(columns[status], { group: 'kanban', animation: 150, onEnd: (evt) => {
+                    const reorderedTasks = [];
+                    columns[status].querySelectorAll('.task-card').forEach(card => {
+                        reorderedTasks.push(tasks.find(t => t.id === card.dataset.id));
+                    });
+                    const otherTasks = tasks.filter(t => t.status !== status);
+                    tasks = [...otherTasks, ...reorderedTasks];
+                    saveTasks();
+                }});
+            });
+
+            // Initial Setup
+            const savedDarkMode = localStorage.getItem('darkMode') === 'true';
+            applyDarkMode(savedDarkMode);
+            setTimeout(setupCarousel, 100); 
+            renderTasks();
+        });
+    </script>
+</body>
+</html>
